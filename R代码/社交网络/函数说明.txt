@@ -1,0 +1,142 @@
+函数说明
+*****************************************************************
+*************			betweenness()		*********
+*****************************************************************
+用法：
+
+
+betweenness(graph, v = V(graph), directed = TRUE, weights = NULL,
+  nobigint = TRUE, normalized = FALSE)
+
+参数说明：
+graph		The graph to analyze.		
+
+vids		The vertices for which the vertex betweenness estimation will be calculated.
+
+directed	Logical, whether directed paths should be considered while determining the shortest paths.
+
+weights		Optional positive weight vector for calculating weighted betweenness. 
+		If the graph has a weight edge attribute, then this is used by default.
+
+nobigint	Logical scalar, whether to use big integers during the calculation. 
+		This is only required for lattice-like graphs that have very many shortest paths between a pair of vertices. 
+		If TRUE (the default), then big integers are not used.
+
+normalized	Logical scalar, whether to normalize the betweenness scores. 
+	        If TRUE, then the results are normalized according to Bnorm=2*B/(n*n-3*n+2),
+		where Bnorm is the normalized, B the raw betweenness, and n is the number of vertices in the graph.
+
+
+函数返回值：
+A numeric vector with the betweenness score for each vertex in v for betweenness.
+
+*****************************************************************
+*************			coreness()		*********
+*****************************************************************
+用法：
+
+coreness(graph, mode = c("all", "out", "in"))
+
+参数说明：
+
+graph		The input graph, it can be directed or undirected	
+
+mod		The type of the core in directed graphs. 
+		Character constant, possible values: 
+		in: in-cores are computed, out: out-cores are computed, all:the corresponding undirected graph is considered. 
+		This argument is ignored for undirected graphs.
+
+
+函数返回值：
+Numeric vector of integer numbers giving the coreness of each vertex.
+
+
+*****************************************************************
+*************			degree()		*********
+*****************************************************************
+用法：
+
+degree(graph, v = V(graph), mode = c("all", "out", "in", "total"),
+       loops = TRUE, normalized = FALSE)
+
+参数说明：
+
+graph		The graph to analyze.
+v		The ids of vertices of which the degree will be calculated.
+
+mode		Character string, “out” for out-degree, “in” for in-degree or “total” for the sum of the two. 
+		For undirected graphs this argument is ignored. “all” is a synonym of “total”.
+
+loops		Logical; whether the loop edges are also counted.
+
+normalized	Logical scalar, whether to normalize the degree. 	
+		If TRUE then the result is divided by n-1, where n is the number of vertices in the graph.
+...	
+		Additional arguments to pass to degree, eg. mode is useful but also v and loops make sense.
+
+函数返回值：
+For degree a numeric vector of the same length as argument v.
+
+
+
+*****************************************************************
+*************			closeness()		*********
+*****************************************************************
+用法：
+
+closeness(graph, vids = V(graph), mode = c("out", "in", "all", "total"),
+  weights = NULL, normalized = FALSE)
+
+参数说明：
+
+graph		The graph to analyze.
+
+vids		The vertices for which closeness will be calculated.
+
+mode		Character string, defined the types of the paths used for measuring the distance in directed graphs. 
+		“in” measures the paths to a vertex, “out” measures paths from a vertex, all uses undirected paths. 
+		This argument is ignored for undirected graphs.
+weights		Optional positive weight vector for calculating weighted closeness. 
+		If the graph has a weight edge attribute, then this is used by default.
+
+normalized	Logical scalar, whether to calculate the normalized closeness. 
+		Normalization is performed by multiplying the raw closeness by n-1, where n is the number of vertices in the graph.
+
+函数返回值：
+Numeric vector with the closeness values of all the vertices in v.
+
+
+*****************************************************************
+*************	    	eigen_centrality()		*********
+*****************************************************************
+用法：
+
+eigen_centrality(graph, directed = FALSE, scale = TRUE, weights = NULL,
+  options = arpack_defaults)
+
+参数说明：
+
+graph		The graph to analyze.
+	
+directed	Logical scalar, whether to consider direction of the edges in directed graphs. It is ignored for undirected graphs.
+
+scale		Logical scalar, whether to scale the result to have a maximum score of one. 
+		If no scaling is used then the result vector has unit length in the Euclidean norm.
+weights		A numerical vector or NULL. 
+		This argument can be used to give edge weights for calculating the weighted eigenvector centrality of vertices. 
+		If this is NULL and the graph has a weight edge attribute then that is used. 
+		If weights is a numerical vector then it used, even if the graph has a weights edge attribute. 
+		If this is NA, then no edge weights are used (even if the graph has a weight edge attribute. 
+		Note that if there are negative edge weights and the direction of the edges is considered, 
+		then the eigenvector might be complex. In this case only the real part is reported.
+
+options		A named list, to override some ARPACK options. See arpack for details.
+
+函数返回值：
+A named list with components:
+
+vector		A vector containing the centrality scores.
+
+value		The eigenvalue corresponding to the calculated eigenvector, i.e. the centrality scores.
+
+options		A named list, information about the underlying ARPACK computation. See arpack for the details.

@@ -1,0 +1,8 @@
+知乎：https://zhuanlan.zhihu.com/p/24884324
+微信：http://mp.weixin.qq.com/s/ntzUT08luJvMrnBxjIXUog
+社区：http://rmarkdown.rstudio.com/
+      http://shiny.rstudio.com/articles/interactive-docs.html
+基础代码功能：
+      http://rmarkdown.rstudio.com/articles.html
+Rmarkdown用法与R语言动态报告 
+http://www.cnblogs.com/nxld/p/6074412.html

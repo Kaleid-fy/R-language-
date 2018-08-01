@@ -1,0 +1,5 @@
+在R中使用Prophet(中文)
+http://datartisan.com/article/detail/230.html?utm_source=tuicool&utm_medium=referral
+
+Awesome R Prophet（英文）（包括源码，介绍，数据）
+https://github.com/facebookincubator/prophet

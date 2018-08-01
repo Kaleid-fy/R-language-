@@ -1,0 +1,7 @@
+from,to,same.dept,friendship,advice
+Bob,Alice,FALSE,4,4
+Cecil,Bob,FALSE,5,5
+Cecil,Alice,TRUE,5,5
+David,Alice,FALSE,2,4
+David,Bob,FALSE,1,2
+Esmeralda,Alice,TRUE,1,3

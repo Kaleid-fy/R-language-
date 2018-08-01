@@ -1,0 +1,396 @@
+################################################################################################
+			##################################
+				##networkD3包##
+
+##力学导向图（forcenetwork）##
+library(networkD3)
+
+
+################################################
+##forceNetwork各参数实际含义测试##
+source<-c(1,1,2,3,4)#出发节点
+target<-c(0,0,0,1,2)#目标节点（source和target的取值域相同，都是0~节点个数-1）
+value<-c(1,20,3,4,2)#表示每次连接权重，在图中表示为边的粗细
+link<-data.frame(source,target,value)
+
+name<-c("A","B","C","D","E")#ABCDE对于01234
+group<-c(1,1,1,1,1)#节点的类属
+size<-c(1,2,3,4,30)#size表示节点大小，实际应用中可以表示连接的边的数目的多少
+node<-data.frame(name,group,size)
+
+forceNetwork(Links = link,
+	Nodes = node, 
+	Source = "source",
+        Target = "target", 
+        Value = "value",
+        NodeID = "name",
+        Nodesize = "size",
+        fontSize=18,
+        radiusCalculation = "Math.sqrt(d.nodesize)+6",
+        Group = "group", 
+	opacity = 2, 
+	legend = TRUE)
+
+################################################
+####风险投资案例
+
+vc<-read.csv("vc_network.csv")
+
+#取上三角矩阵
+vc[upper.tri(vc)]=0
+len<-length(vc[,1])
+##初始化##
+source<-c()
+target<-c()
+value<-c()
+
+name<-c()
+group<-c()
+size<-c()
+##建立连接link数据框##
+k<-1
+for(i in 1:len){
+  for(j in 1:len){
+    if(vc[i,j]!=0)
+      {
+      source[k]<-i-1
+      target[k]<-j-1
+      value[k]<-1       #value数值相差太大，画出来的图不美观。本来应该是value[k]<-vc[i,j]
+      k<-k+1
+    }
+  }
+}
+#print(source)
+#print(target)
+#print(value)
+link<-data.frame(source,target,value)
+
+##建立节点node数据框#
+vc_name<-vc[,1]
+group<-c(rep(1,19),rep(2,50),rep(3,50))  #c(rep(1,len))#节点的类属，不分组的话图不是彩色的，老师可以跑一下R里的前两个例子
+size<-as.data.frame(table(source))[,2]   #as.data.frame(table(x))可以用来统计向量中各个数值出现的频数，返回一个矩阵
+node<-data.frame(vc_name,group,size)
+
+
+forceNetwork(Links = link, Nodes = node, Source = "source",height=800,width=1000,
+             Target = "target", Value = "value", NodeID = "vc_name",
+             Nodesize = "size",fontSize=18,zoom=T,
+             radiusCalculation = "Math.sqrt(d.nodesize)+6",
+             Group = "group", opacity = 2, legend = TRUE)
+
+
+
+
+
+################################################
+##simpleNetwork##
+de<-read.csv("1.csv")
+dee<-de[,2:31]
+diag(dee)<-1
+k=0
+o1<-c()
+for(i in 1:ncol(dee)){
+  for(j in 1:ncol(dee)){
+    if(dee[i,j]==1) o1<-c(o1,i,j)
+  }
+}
+
+l<-c(1:length(o1))
+relations <- data.frame(from<-paste0(rep("x",length(o1[l%%2==1])),o1[l%%2==1]),#源节点
+                        to<-paste0(rep("x",length(o1[l%%2==1])),o1[l%%2==0]))#目标节点
+
+simpleNetwork(relations,
+              fontSize=12,#字体大小
+              textColour = "black",#字体颜色，颜色可以上网查，可以直接用RGB表示，比如"#E34A33"
+              linkColour = "gray",#连线颜色
+              nodeColour = "blue",#节点颜色
+              height = NULL,#图片高度
+              width = NULL,#图片宽度
+              opacity = 1)#不透明度
+
+################################################################################################
+			##################################
+###############################################################################
+#
+# 算法名称：outliers detection(异常值检测)算法
+# 作者：付宇
+# 日期：2017.3.7
+# 版本：V2.0
+#
+# 输入参数：
+#   filePath：储存样本集的路径
+# 输出参数：
+#  output.csv:存储“有孤立点标识”的数据
+#  outliers.png：存储“表示出孤立点“的图表
+################################################################################
+
+##################算法部分######################
+#调用R包
+library(MVN)
+
+JQ_CUFE_OUTLIERS<- function(filePath)
+{
+  #读取样本集
+  testdata<-read.csv(file=filePath)
+  #参数检查
+  ##检查数据集是否为数值型数据框
+  if((!is.data.frame(testdata)))
+  {
+    testdata<-as.data.frame(testdata)
+  }
+  #获取生成的图片,png...dev.off()
+  png(file='outliers.png')
+  #调用 mvOutlier算法
+  result = mvOutlier(setosa, qqplot = TRUE, method = "quan", label = TRUE)
+  #获取结果
+  output<-result$outlier[,1:ncol(result$outlier)]
+  #以表格和图片的形式输出结果
+  write.table(output, file = "output.csv", sep = ",",col.names = NA , qmethod = "double")
+  dev.off()
+  
+}
+##测试
+JQ_CUFE_OUTLIERS( "testdata.csv")
+
+###############################################################################
+#
+# 算法名称：k-近邻算法
+# 作者：付宇
+# 日期：2017.3.7
+# 版本：V2.0
+#
+# 输入参数：
+#   train:已知分类的样本集（数值型数据，每行为样本,每列为属性，最后一列为类别属性）
+#    test:需要分类的样本集（数值型数据，每行为样本,每列为属性）
+#      k :以附近k个样本为参考（数值型数据）
+# 输出参数：
+#  outcome.csv:有分类标识的原数据
+#
+################################################################################
+
+##################算法部分######################
+#调用R包
+library(class)
+#算法实现
+
+JQ_CUFE_KNN<- function(filePath1,filePath2,k)
+{
+  #读取已知分类的样本集
+  Sample<-read.csv(file=filePath1)
+  #参数检查
+  ##检查数据集是否为数值型数据框
+  if((!is.data.frame(Sample)))
+  {
+    Sample<-as.data.frame(Sample)
+  }
+  train<-Sample[,1:ncol(Sample)-1]
+  #读取需要分类的样本集
+  test<-read.csv(file=filePath2)
+  if((!is.data.frame( test)))
+  {
+    test<-as.data.frame( test)
+  }
+  
+  #提取已知分类样本集中各样本分类标签
+  cl<-Sample[,ncol(Sample)]
+  
+  #调用KNN算法
+  out<-knn(train,test ,cl, k)
+  
+  #将分类结果原数据合并
+  output<-cbind(out,test)
+  #给结果输出矩阵列命名
+  colnames(output)<-c("类别",colnames(test))
+  #以表格形式输出结果
+  write.table(output, file = "outcome.csv", sep = ",",col.names = NA,  qmethod = "double")
+}
+
+#测试
+output<-JQ_CUFE_KNN("input_train.csv","input_test.csv",4)
+
+
+################################################################################
+# 利用xlsx包读取Excel数据
+library(xlsx)
+res<- read.xlsx("sample.xlsx",1)
+res
+# 利用XLConnect包读取Excel数据
+rm(list=ls())
+library(XLConnect)
+wb <- loadWorkbook("sample.xlsx")
+xlds <- readWorksheet(wb,"mysheet")
+xlds
+# 利用readxl包来读取Excel数据
+library(readxl)
+xlread <- read_excel("sample.xlsx",1)
+xlread
+################################################################################
+### 数据变换 ###
+library(ggplot2)
+set.seed(1234)
+dsmall <- diamonds[sample(1:nrow(diamonds),1000,replace = F),] #数据抽样
+head(dsmall)
+par(mfrow = c(1,2))
+plot(density(dsmall$carat),main = "carat变量的正态分布曲线") # 绘制carat变量的正态分布曲线 
+plot(density(dsmall$price),main = "price变量的正态分布曲线") # 绘制price变量的正态分布曲线 
+par(mfrow = c(1,1))
+par(mfrow = c(1,2))
+plot(density(log(dsmall$carat)),main = "carat变量取对数后的正态分布曲线") 
+plot(density(log(dsmall$price)),main = "price变量取对数后的正态分布曲线") 
+par(mfrow = c(1,1))
+# 可见，经过对数处理后，两者的正态分布密度曲线就对称很多
+# 建立线性回归模型
+fit1 <- lm(dsmall$price~dsmall$carat,data = dsmall) # 对原始变量进行建模
+summary(fit1) # 查看模型详细结果
+fit2 <-lm(log(dsmall$price)~log(dsmall$carat),data=dsmall) # 对两者进行曲对数后再建模
+summary(fit2) # 查看模型结果
+# 在散点图中 绘制拟合曲线
+par(mfrow=c(1,2))
+plot(dsmall$carat,dsmall$price,
+     main = "未处理的散点图及拟合直线")
+abline(fit1,col="red",lwd=2)
+plot(log(dsmall$carat),log(dsmall$price),
+     main = "取对数后的散点图及拟合直线")
+abline(fit2,col="red",lwd=2)
+par(mfrow=c(1,1))
+################################################################################
+#### 数据清洗 ###
+# 以睡眠数据sleep为例识别缺失值
+# 加载sleep数据集
+data(sleep,package="VIM")
+attach(sleep)
+# 查看数据结构
+# is.na( )判断变量Dream各值是否为缺失值，TRUE为缺失值，FALSE为非缺失值
+is.na(Dream)
+table(is.na(Dream))
+# complete.cases( )判断变量Dream各值是否为缺失值，FALSE为缺失值，TRUE为非缺失值
+complete.cases(Dream)
+table(complete.cases(Dream))
+# 探索缺失值模式
+# 列表显示缺失值
+# mice包中的md.pattern()函数
+# 将函数应用到sleep数据集
+library(mice)
+md.pattern(sleep)
+# 图形探究缺失数据
+# aggr()函数
+library(VIM)
+aggr(sleep,prop=FALSE,numbers=TRUE)
+# 直接删除缺失值
+sleep_clean <- na.omit(sleep)
+################################################################################
+## 数据抽样 ####
+# 简单抽样
+# sample小例子
+set.seed(1234)
+# 创建对象x，有1~10组成
+x <- seq(1,10);x
+# 利用sample函数对x进行无放回抽样
+a <- sample(x,8,replace=FALSE);a
+# 利用sample函数对x进行有放回抽样
+b <- sample(x,8,replace=TRUE);b
+
+# 加载DMwR包
+if(!require(DMwR)) install.packages("DMwR")
+dat <- iris[, c(1, 2, 5)]
+dat$Species <- factor(ifelse(dat$Species == "setosa","rare","common")) 
+table(dat$Species)
+# 进行类失衡处理
+# perc.over=600:表示少数样本数=50+50*600%=350
+# perc.under=100:表示多数样本数(新增少数样本数*100%=300*100%=300)
+newData <- SMOTE(Species ~ ., dat, perc.over = 600,perc.under=100)
+table(newData$Species)
+# perc.over=100:表示少数样本数=50+50*100%=100
+# perc.under=200:表示多数样本数(新增少数样本数*200%=50*200%=100)
+newData <- SMOTE(Species ~ ., dat, perc.over = 100,perc.under=200)
+table(newData$Species)
+################################################################################
+### 哑变量处理 ###
+customers <- data.frame(
+  id=c(10,20,30,40,50), 
+  gender=c('male','female','female','male','female'), 
+  mood=c('happy','sad','happy','sad','happy'), 
+  outcome=c(1,1,0,0,0))
+customers
+library(caret)
+# 哑变量处理
+dmy <- dummyVars(" ~ .", data = customers)
+trsf <- data.frame(predict(dmy, newdata = customers))
+print(trsf)
+################################################################################
+#### 聚类分析 ###
+# 应用案例—K-均值聚类
+# 在本例中，我们使用iris数据集演示k-means聚类的过程。
+iris2<-iris
+# 移除Species属性
+iris2$Species<-NULL # 等价于 iris2 <- iris2[,1:4]
+# 利用kmeans()函数进行k-means聚类，并将聚类结果储存在变量kmeans.result中。
+(kmeans.result<-kmeans(iris2,3))
+# 查看划分效果
+table(iris$Species,kmeans.result$cluster)
+# 然后，绘制所有的簇和簇中心。
+plot(iris2[c("Sepal.Length","Sepal.Width")],
+     col=kmeans.result$cluster)
+# plot cluster centers
+points(kmeans.result$centers[,c("Sepal.Length","Sepal.Width")],
+       col=1:3,pch=8,cex=2)
+#应用案例 mtcars数据集-层次聚类
+# 选择变量
+mtcars1 <- mtcars[,c('mpg','disp','hp','drat','wt','qsec')]
+# 标准化数据，聚类方法="complete"
+h <- hclust(dist(scale(mtcars1)),'complete')
+# 画树状图
+plot(h,labels=rownames(mtcars1),cex=0.6)
+# 自动分成4类
+rect.hclust(h,k=4)
+w <- t(mtcars)
+h1 <- hclust(dist(w))
+plot(h1)
+################################################################################
+### 关联规则 ####
+# 超市购物例子
+# 数据理解
+library(arules)
+data(Groceries)
+summary(Groceries)
+# 查看前6项交易记录
+inspect(Groceries[1:6])
+# 也可以利用as函数将数据转换成data.frame格式
+head(as(Groceries,"data.frame"))
+# itemFrequency( )函数可以看到包含该商品的交易比例。
+# 例如Groceries数据中前3件商品的支持度：
+itemFrequency(Groceries[,1:3])
+# 例如我们查看Groceries数据中商品whole milk、other vegetables的销售占比：
+itemFrequency(Groceries[,c("whole milk","other vegetables")])
+
+# 可视化商品的支持度—商品的频率图
+# 使用itemFrequencyPlot( )函数
+# 如果希望获得那些出现在最小交易比例中的商品，可以在itemFrequencyPlot( )函数中运用support参数：
+itemFrequencyPlot(Groceries,support=0.1)
+# 在itemFrequencyPlot( )函数中使用topN参数:
+itemFrequencyPlot(Groceries,topN=20)
+
+# 基于数据训练模型
+# 采用默认设置：support=0.1和confidence=0.8
+apriori(Groceries)
+# 设置support=0.006,confidence=0.25,minlen=2
+groceryrules <- apriori(Groceries,parameter = 
+                          list(support=0.006,confidence=0.25,minlen=2))
+groceryrules
+# 评估模型性能
+# 使用summary( )查看更多信息
+summary(groceryrules)
+# 查看具体规则
+inspect(groceryrules[1:3])
+# 对关联规则集合排序
+inspect(sort(groceryrules,by="lift")[1:5])
+# 提取关联规则的子集
+berryrules <- subset(groceryrules,items %in% "berries")
+inspect(berryrules)
+# 关联规则可视化
+library(arulesViz)
+plot(subset(groceryrules,lift > 3),method="graph")
+
+
+
+				

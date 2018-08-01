@@ -1,0 +1,36 @@
+---
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+# Say Hello to markdown
+
+Markdown is an **easy to use** format for writing reports. It resembles what you naturally write every time you compose an email. In fact, you may have already used markdown *without realizing it*. These websites all rely on markdown formatting
+
+* [Github](www.github.com)
+* [StackOverflow](www.stackoverflow.com)
+* [Reddit](www.reddit.com)
+
+Here's some code
+```{r}
+dim(iris)
+```
+```{r eval = FALSE}
+##eval = FALSE只将代码放入
+dim(iris)
+```
+```{r echo = FALSE}
+##echo = FALSE只将代码结果放入
+dim(iris)
+```
+```{r}
+hist(iris[[2]])
+```
+
+# 行间代码
+嵌入R代码到文本当中，在代码的两侧用点’来包围
+Two plus two equals `r 2 + 2`.
+
+
