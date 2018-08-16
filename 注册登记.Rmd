@@ -1,0 +1,1400 @@
+---
+title: "肿瘤分析"
+author: "付宇"
+date: "2018年8月16日"
+output: html_document
+---
+
+
+
+```{r include=FALSE,results="hide"}
+library(openxlsx)
+library(dplyr)
+library(reshape2)
+library(ggplot2)
+library(lubridate)
+library(gridExtra)
+
+# DT包资料：https://rstudio.github.io/DT/
+library(DT)
+
+# ggplot2绘制Excel所有图
+# https://brucezhaor.github.io/blog/2016/06/13/excel2ggplot/#section-26
+
+.libPaths("F:/R-3.4.1/library")
+
+
+####################################################################################
+##############           东直门医院                                #################
+####################################################################################
+setwd('F:/00/项目/易老师/肿瘤/新到数据/注册登记数据导出20180814/东直门医院2015-10-29~2018-5-31/')
+dir()
+
+# 保存就诊信息
+dzm_jz_dat <- read.table("患者就诊信息2.csv",sep=',', header = T,encoding="utf-8",stringsAsFactors=T)
+# str(dzm_jz_dat)
+dzm_jz_dat$就诊时间 <- as.Date(dzm_jz_dat$就诊时间)
+dzm_jz_dat$就诊年份 <- as.factor(year(dzm_jz_dat$就诊时间))
+
+dzm_zyfy_dat <- read.table("住院费用2.csv",sep=',', header = T,encoding="utf-8",stringsAsFactors=T)
+dzm_mzfy_dat <- read.table("门诊费用2.csv",sep=',', header = T,encoding="utf-8",stringsAsFactors=T)
+
+
+####################################################
+####### 数据预处理
+
+## 1.处理年龄
+dzm_jz_dat$年龄 <- gsub(pattern = "岁", replacement = "", x = dzm_jz_dat$年龄 )
+dzm_jz_dat$年龄 <- as.integer(dzm_jz_dat$年龄)
+# str(dzm_jz_dat)
+# <40;40~50;50~60;60~70;70<
+dzm_jz_dat$年龄分组 <- 0
+which(is.na(dzm_jz_dat$年龄))
+#colnames(dzm_jz_dat)
+
+for(i in 1:nrow(dzm_jz_dat)){
+  # print(i)
+  if(is.na(dzm_jz_dat[i,5]))  dzm_jz_dat[i,17] <- "null" 
+  else if(dzm_jz_dat[i,5] >= 70)  dzm_jz_dat[i,17] <- ">=70" 
+  else if(dzm_jz_dat[i,5] < 70 & dzm_jz_dat[i,5] >= 60)  dzm_jz_dat[i,17] <- "60~70" 
+  else if(dzm_jz_dat[i,5] < 60 & dzm_jz_dat[i,5] >= 50)  dzm_jz_dat[i,17] <- "50~60" 
+  else if(dzm_jz_dat[i,5] < 50 & dzm_jz_dat[i,5] >= 40)  dzm_jz_dat[i,17] <- "40~50" 
+  else if(dzm_jz_dat[i,5] < 40 )  dzm_jz_dat[i,17] <- "<40"
+}
+
+dzm_jz_dat$年龄分组 <- as.factor(dzm_jz_dat$年龄分组)
+dzm_jz_dat$年龄分组 <-ordered(dzm_jz_dat$年龄分组, levels = c("<40","40~50", "50~60","60~70",">=70","null"))
+
+
+#########################################################################
+############                     住院角度              ##################
+#########################################################################
+
+dzm_jz_dat1 <- dzm_jz_dat[dzm_jz_dat$就诊类型=="住院",]
+
+
+####################################################
+# 患者性别占比统计
+dzm_a1 <- as.data.frame(table(dzm_jz_dat1$性别,dzm_jz_dat1$就诊年份)) 
+dzm_a1 <- dzm_a1[dzm_a1$Var1 %in% c("男","女"),]
+
+dzm_g1 <- ggplot(dzm_a1,aes(x = Var2,Freq,fill=Var1))+
+            geom_bar(stat="identity",position="fill",width=0.8,colour="white")+
+            geom_text(data=dzm_a1[dzm_a1$Var1=="男",],aes(Var2,0.95,label=Freq),colour="white",show.legend = F,size=3)+
+            geom_text(data=dzm_a1[dzm_a1$Var1=="女",],aes(Var2,0.05,label=Freq),colour="white",show.legend = F,size=3)+
+            theme(plot.title = element_text(hjust = 0.5),axis.text.x = element_text(size =10,angle=40))+
+            labs(x = "年份", y = "比例", title = "2015~2018住院男女患者占比")+
+            labs(fill="性别") # 设置图例标题
+
+# print(dzm_g1)
+
+####################################################
+# 患者本埠外埠占比
+
+####################################################
+# 患者年龄分布
+
+dzm_age1 <- as.data.frame(table(dzm_jz_dat1$性别,dzm_jz_dat1$年龄分组,dzm_jz_dat1$就诊年份)) 
+dzm_age1 <- dzm_age1[dzm_age1$Var1 %in% c("男","女"),]
+
+dzm_g2 <-  ggplot(dzm_age1,aes(x=Var1, y=Freq, fill=Var2))+
+              geom_bar(stat='identity',position="dodge")+
+              labs(x = "年龄段", y = "人数", title = "东直门医院男女患者年龄段分布")+
+              facet_wrap(~Var3,scales="free",nrow=1, ncol=4)+
+              labs(fill="年龄段")
+
+# print(dzm_g2)
+
+####################################################
+# 患者癌症病种分布
+dzm_disease1 <- as.data.frame(table(dzm_jz_dat1$病种,dzm_jz_dat1$晚期,dzm_jz_dat1$就诊年份)) 
+dzm_disease1 <- dzm_disease1[which(dzm_disease1$Var1!='其他'),]
+dzm_disease1 <- dzm_disease1[which(dzm_disease1$Freq!=0),]
+
+dzm_g3 <-  ggplot(dzm_disease1,aes(x=Var1, y=Freq, fill=Var2))+
+              geom_bar(stat='identity',position="dodge")+
+              labs(x = "癌症类型", y = "人数", title = "东直门医院住院患者癌症病种分布")+
+              facet_wrap(~Var3,scales="free",nrow=1)+
+              labs(fill="晚期")
+# print(dzm_g3)
+
+
+
+
+####################################################
+# 住院费用
+# 合并匹配费用和就诊信息表，按照患者ID,就诊次数匹配
+dzm_dat_temp1 <- merge(dzm_zyfy_dat,dzm_jz_dat,by=c("患者ID","就诊次数"))
+# merge(dzm_zyfy_dat,dzm_zyfy_dat,by=c("患者ID","就诊次数"))
+colnames(dzm_dat_temp1)
+dzm_zyfy_dat2 <- dzm_dat_temp1[,c(1:24,38)]
+colnames(dzm_zyfy_dat2)
+str(dzm_zyfy_dat2)
+dzm_zyfy_dat2$总费用 <- rowSums(dzm_zyfy_dat2[,3:24]) 
+
+nn <- ncol(dzm_zyfy_dat2)
+nc1 <- nn-3
+nc2 <- nn-2
+
+
+# 统计规则：具体的某项费用，如西药、输血之类，当计算次均费用时，
+# 只将非0的纳入计算，即只有开了西药或者输了血的才算次数。
+# 计算占比时0的也计算
+c_per_cost <- function(x){
+  t_ind <- which(x!=0)
+  out <- ifelse(is.na(mean(x[t_ind])),0,mean(x[t_ind]))
+  out <- round(out,2)
+  return(out)
+}
+
+dzm_zy_per_cost <- as.data.frame(matrix(0,4,nc1)) 
+colnames(dzm_zy_per_cost) <- c("年份",colnames(dzm_zyfy_dat2)[3:nc2])
+
+dzm_zy_r_cost <- as.data.frame(matrix(0,4,nc2)) 
+colnames(dzm_zy_r_cost) <- c("年份",colnames(dzm_zyfy_dat2)[c(3:nc2,nn)])
+
+nf <- unique(dzm_jz_dat$就诊年份)
+k = 1 
+for(m in nf){
+  print(m)
+  # 计算次均值
+  dzm_zy_per_cost[k,1] <- m
+  ind_temp <- which(dzm_zyfy_dat2$就诊年份==m)
+  dzm_zy_per_cost[k,2:nc1] <- apply(dzm_zyfy_dat2[ind_temp,3:nc2],2,c_per_cost)
+  
+  # 计算占比
+  dzm_zy_r_cost[k,1] <- m
+  dzm_zy_r_cost[k,2:nc2] <- round(colMeans(dzm_zyfy_dat2[ind_temp,c(3:nc2,nn)]),2) 
+  
+  k = k+1
+}
+
+# 绘制次均费用直方图（分面）
+dzm_zy_per_cost1 <- melt(dzm_zy_per_cost,id.vars="年份")
+dzm_zy_per_cost1 <- dzm_zy_per_cost1[which(dzm_zy_per_cost1$value!=0),]
+str(dzm_zy_per_cost1)
+dzm_g4 <- ggplot(dzm_zy_per_cost1,aes(x=variable, y=value, fill=年份))+
+  geom_bar(stat='identity',position="dodge",width = 0.5)+
+  labs(x = "费用类别", y = "次均费用", title = "东直门医院住院次均费用年度变化")+
+  facet_wrap(~variable,scales="free")
+
+# print(dzm_g4)
+
+# 绘制费用占比饼图
+for(l in 1:4){
+  
+  dzm_aaa1 <- dzm_zy_r_cost[l,which(dzm_zy_r_cost[l,2:nc1]>1000)+1]
+  dzm_aaa1 <- as.data.frame(t(dzm_aaa1)) 
+  # 其余金额较小(小于1000)的归为一类
+  dzm_bbb1 <- sum(dzm_zy_r_cost[l,which(dzm_zy_r_cost[l,2:nc1]<1000)+1])
+  dzm_aaa1 <- rbind(dzm_aaa1,dzm_bbb1)
+  rownames(dzm_aaa1)[nrow(dzm_aaa1)] <- "剩余费用之和"
+  
+  dzm_aaa1$var <- rownames(dzm_aaa1)
+  
+  colnames(dzm_aaa1)[1] <- 'value'
+  dzm_aaa1 <- arrange(dzm_aaa1,value)
+  # dzm_aaa1$var <- factor(dzm_aaa1$var,levels = c("西药","中成药","化验","检查","中草药","治疗") )
+  dzm_aaa1$var <- factor(dzm_aaa1$var,levels = dzm_aaa1$var ) # 排好序，不然后续画饼图会乱
+  # str(dzm_aaa1)
+  # levels(dzm_aaa1$var)
+  
+  
+  # 绘制饼图资料：https://blog.csdn.net/Bone_ACE/article/details/47455363#%E9%A5%BC%E7%8E%AF%E4%BC%98%E5%8C%96
+  dzm_g5<- ggplot(dzm_aaa1,aes(x =1,value,fill=var))+
+    geom_bar(stat = "identity",color='black')+
+    scale_fill_discrete(breaks=dzm_aaa1$var)+
+    geom_text(aes(x=1.25,y=cumsum(rev(value))-rev(value)/2,label=paste(rev(var),":",round(rev(value)/sum(value)*100,2),"%")),size=4,color="white")+
+    theme(panel.grid=element_blank()) +    ## 去掉白色圆框和中间的坐标线
+    theme(panel.border=element_blank())+   ## 去掉最外层正方形的框框
+    theme(axis.text.x = element_blank())+  ## 白色的外框即是原柱状图的X轴，把X轴的刻度文字去掉即可
+    labs(x = "", y = "", title = paste(l+2014,"东直门医院住院金额较大的费用类型占比",sep='')) + 
+    theme(axis.ticks = element_blank()) + 
+    theme(axis.text.y = element_blank())+
+    guides(fill=FALSE)+   ## 将图例标题设为空
+    coord_polar(theta = "y")
+  
+  
+  # 绘制金额较小的部分
+  dzm_ccc1 <- dzm_zy_r_cost[l,which(dzm_zy_r_cost[l,2:nc1]<1000&dzm_zy_r_cost[l,2:nc1]>10)+1]
+  dzm_ccc1 <- as.data.frame(t(dzm_ccc1)) 
+  
+  
+  dzm_ccc1$var <- rownames(dzm_ccc1)
+  
+  colnames(dzm_ccc1)[1] <- 'value'
+  dzm_ccc1 <- arrange(dzm_ccc1,value)
+  dzm_ccc1$var <- factor(dzm_ccc1$var,levels = dzm_ccc1$var ) # 排好序，不然后续画饼图会乱
+  
+  
+  dzm_g6 <- ggplot(dzm_ccc1,aes(x =1,value,fill=var))+
+    geom_bar(stat = "identity",color='black')+
+    scale_fill_discrete(breaks=var)+
+    geom_text(aes(x=1.25,y=cumsum(rev(value))-rev(value)/2,label=paste(rev(var),":",round(rev(value)/sum(value)*100,2),"%")),size=4,color="white")+
+    theme(panel.grid=element_blank()) +    ## 去掉白色圆框和中间的坐标线
+    theme(panel.border=element_blank())+   ## 去掉最外层正方形的框框
+    theme(axis.text.x = element_blank())+  ## 白色的外框即是原柱状图的X轴，把X轴的刻度文字去掉即可
+    labs(x = "", y = "", title = paste(l+2014,"东直门医院住院金额较小的费用类型占比",sep='') ) + 
+    theme(axis.ticks = element_blank()) + 
+    theme(axis.text.y = element_blank())+
+    guides(fill=FALSE)+   ## 将图例标题设为空
+    coord_polar(theta = "y")
+  assign(x=paste("dzm_g5",l,sep = 'a'),value=dzm_g5)
+  assign(x=paste("dzm_g6",l,sep = 'a'),value=dzm_g6)
+  # grid.arrange(dzm_g5,dzm_g6,ncol=2,nrow=1)
+}
+
+
+#########################################################################
+############                     门诊角度              ##################
+#########################################################################
+
+dzm_jz_dat2 <- dzm_jz_dat[dzm_jz_dat$就诊类型=="门诊",]
+
+
+####################################################
+# 患者性别占比统计
+dzm_a2 <- as.data.frame(table(dzm_jz_dat1$性别,dzm_jz_dat1$就诊年份)) 
+dzm_a2 <- dzm_a2[dzm_a2$Var1 %in% c("男","女"),]
+
+dzm_g1_2 <- ggplot(dzm_a2,aes(x = Var2,Freq,fill=Var1))+
+  geom_bar(stat="identity",position="fill",width=0.8,colour="white")+
+  geom_text(data=dzm_a2[dzm_a2$Var1=="男",],aes(Var2,0.95,label=Freq),colour="white",show.legend = F,size=3)+
+  geom_text(data=dzm_a2[dzm_a2$Var1=="女",],aes(Var2,0.05,label=Freq),colour="white",show.legend = F,size=3)+
+  theme(plot.title = element_text(hjust = 0.5),axis.text.x = element_text(size =10,angle=40))+
+  labs(x = "年份", y = "比例", title = "2015~2018东直门医院门诊男女患者占比")+
+  labs(fill="性别")
+ 
+# print(dzm_g1_2)
+
+####################################################
+# 患者本埠外埠占比
+
+####################################################
+# 患者年龄分布
+
+dzm_age2 <- as.data.frame(table(dzm_jz_dat1$性别,dzm_jz_dat1$年龄分组,dzm_jz_dat1$就诊年份)) 
+dzm_age2 <- dzm_age2[dzm_age2$Var1 %in% c("男","女"),]
+dzm_age2 <- dzm_age2[dzm_age2$Var3 %in% c("2015","2016","2017","2018"),]
+
+dzm_g2_2 <-  ggplot(dzm_age2,aes(x=Var1, y=Freq, fill=Var2))+
+  geom_bar(stat='identity',position="dodge")+
+  labs(x = "年龄段", y = "人数", title = "东直门医院门诊男女患者年龄段分布")+
+  facet_wrap(~Var3,scales="free",nrow=1)+
+  labs(fill="年龄段")
+
+# print(dzm_g2_2)
+
+####################################################
+# 患者癌症病种分布
+dzm_disease2 <- as.data.frame(table(dzm_jz_dat1$病种,dzm_jz_dat1$晚期,dzm_jz_dat1$就诊年份)) 
+dzm_disease2 <- dzm_disease2[which(dzm_disease2$Var1!='其他'),]
+dzm_disease2 <- dzm_disease2[which(dzm_disease2$Freq!=0),]
+
+dzm_g3_2 <-  ggplot(dzm_disease2,aes(x=Var1, y=Freq, fill=Var2))+
+  geom_bar(stat='identity',position="dodge")+
+  labs(x = "癌症类型", y = "人数", title = "东直门医院门诊患者癌症病种分布")+
+  facet_wrap(~Var3,scales="free",nrow=1)+
+  labs(fill="晚期")
+# print(dzm_g3_2)
+
+
+
+####################################################
+# 门诊费用
+# 合并匹配费用和就诊信息表，按照患者ID,就诊次数匹配
+dzm_dat_temp2 <- merge(dzm_mzfy_dat,dzm_jz_dat,by=c("患者ID","就诊次数"))
+# merge(dzm_mzfy_dat,dzm_mzfy_dat,by=c("患者ID","就诊次数"))
+# colnames(dzm_dat_temp2)
+dzm_mzfy_dat2 <- dzm_dat_temp2[,c(1:23,37)]
+# colnames(dzm_mzfy_dat2)
+# str(dzm_mzfy_dat2)
+dzm_mzfy_dat2$总费用 <- rowSums(dzm_mzfy_dat2[,3:23]) 
+
+nn <- ncol(dzm_mzfy_dat2)
+nc1 <- nn-3
+nc2 <- nn-2
+
+
+# 统计规则：具体的某项费用，如西药、输血之类，当计算次均费用时，
+# 只将非0的纳入计算，即只有开了西药或者输了血的才算次数。
+# 计算占比时0的也计算
+
+
+dzm_mz_per_cost <- as.data.frame(matrix(0,4,nc1)) 
+colnames(dzm_mz_per_cost) <- c("年份",colnames(dzm_mzfy_dat2)[3:nc2])
+
+dzm_mz_r_cost <- as.data.frame(matrix(0,4,nc2)) 
+colnames(dzm_mz_r_cost) <- c("年份",colnames(dzm_mzfy_dat2)[c(3:nc2,nn)])
+
+nf <- unique(dzm_jz_dat$就诊年份)
+k = 1 
+for(m in nf){
+  print(m)
+  # 计算次均值
+  dzm_mz_per_cost[k,1] <- m
+  ind_temp <- which(dzm_mzfy_dat2$就诊年份==m)
+  dzm_mz_per_cost[k,2:nc1] <- apply(dzm_mzfy_dat2[ind_temp,3:nc2],2,c_per_cost)
+  
+  # 计算占比
+  dzm_mz_r_cost[k,1] <- m
+  dzm_mz_r_cost[k,2:nc2] <- round(colMeans(dzm_mzfy_dat2[ind_temp,c(3:nc2,nn)]),2) 
+  
+  k = k+1
+}
+
+# 绘制次均费用直方图（分面）
+dzm_mz_per_cost1 <- melt(dzm_mz_per_cost,id.vars="年份")
+dzm_mz_per_cost1 <- dzm_mz_per_cost1[which(dzm_mz_per_cost1$value!=0),]
+# str(dzm_mz_per_cost1)
+dzm_g4_2 <- ggplot(dzm_mz_per_cost1,aes(x=variable, y=value, fill=年份))+
+  geom_bar(stat='identity',position="dodge",width = 0.5)+
+  labs(x = "费用类别", y = "次均费用", title = "东直门医院门诊次均费用年度变化")+
+  facet_wrap(~variable,scales="free")
+
+# print(dzm_g4_2)
+
+# 绘制费用占比饼图
+for(l in 1:4){
+  
+  dzm_aaa2 <- dzm_mz_r_cost[l,which(dzm_mz_r_cost[l,2:nc1]>50)+1]
+  dzm_aaa2 <- as.data.frame(t(dzm_aaa2)) 
+  # 其余金额较小(小于1000)的归为一类
+  dzm_bbb2 <- sum(dzm_mz_r_cost[l,which(dzm_mz_r_cost[l,2:nc1]<=50)+1])
+  dzm_aaa2 <- rbind(dzm_aaa2,dzm_bbb2)
+  rownames(dzm_aaa2)[nrow(dzm_aaa2)] <- "剩余费用之和"
+  
+  dzm_aaa2$var <- rownames(dzm_aaa2)
+  
+  colnames(dzm_aaa2)[1] <- 'value'
+  dzm_aaa2 <- arrange(dzm_aaa2,value)
+  # dzm_aaa2$var <- factor(dzm_aaa2$var,levels = c("西药","中成药","化验","检查","中草药","治疗") )
+  dzm_aaa2$var <- factor(dzm_aaa2$var,levels = dzm_aaa2$var ) # 排好序，不然后续画饼图会乱
+  # str(dzm_aaa2)
+  # levels(dzm_aaa2$var)
+  
+  
+  # 绘制饼图资料：https://blog.csdn.net/Bone_ACE/article/details/47455363#%E9%A5%BC%E7%8E%AF%E4%BC%98%E5%8C%96
+  dzm_g5_2<- ggplot(dzm_aaa2,aes(x =1,value,fill=var))+
+    geom_bar(stat = "identity",color='black')+
+    theme_bw()+
+    scale_fill_discrete(breaks=dzm_aaa2$var)+
+    geom_text(aes(x=1.25,y=cumsum(rev(value))-rev(value)/2,label=paste(rev(var),":",round(rev(value)/sum(value)*100,2),"%")),size=4,color="white")+
+    theme(panel.grid=element_blank()) +    ## 去掉白色圆框和中间的坐标线
+    theme(panel.border=element_blank())+   ## 去掉最外层正方形的框框
+    theme(axis.text.x = element_blank())+  ## 白色的外框即是原柱状图的X轴，把X轴的刻度文字去掉即可
+    labs(x = "", y = "", title = paste(l+2014,"东直门医院门诊金额较大的费用类型占比",sep='')) + 
+    theme(axis.ticks = element_blank()) + 
+    theme(axis.text.y = element_blank())+
+    guides(fill=FALSE)+   ## 将图例标题设为空
+    coord_polar(theta = "y")
+  
+  
+  # 绘制金额较小的部分
+  dzm_ccc2 <- dzm_mz_r_cost[l,which(dzm_mz_r_cost[l,2:nc1]<50&dzm_mz_r_cost[l,2:nc1]>0)+1]
+  dzm_ccc2 <- as.data.frame(t(dzm_ccc2)) 
+  
+  
+  dzm_ccc2$var <- rownames(dzm_ccc2)
+  
+  colnames(dzm_ccc2)[1] <- 'value'
+  dzm_ccc2 <- arrange(dzm_ccc2,value)
+  dzm_ccc2$var <- factor(dzm_ccc2$var,levels = dzm_ccc2$var ) # 排好序，不然后续画饼图会乱
+  
+  
+  dzm_g6_2 <- ggplot(dzm_ccc2,aes(x =1,value,fill=var))+
+    geom_bar(stat = "identity",color='black')+
+    theme_bw()+
+    scale_fill_discrete(breaks=var)+
+    geom_text(aes(x=1.25,y=cumsum(rev(value))-rev(value)/2,label=paste(rev(var),":",round(rev(value)/sum(value)*100,2),"%")),size=4,color="white")+
+    theme(panel.grid=element_blank()) +    ## 去掉白色圆框和中间的坐标线
+    theme(panel.border=element_blank())+   ## 去掉最外层正方形的框框
+    theme(axis.text.x = element_blank())+  ## 白色的外框即是原柱状图的X轴，把X轴的刻度文字去掉即可
+    labs(x = "", y = "", title = paste(l+2014,"东直门门诊金额较小的费用类型占比",sep='') ) + 
+    theme(axis.ticks = element_blank()) + 
+    theme(axis.text.y = element_blank())+
+    guides(fill=FALSE)+   ## 将图例标题设为空
+    coord_polar(theta = "y")
+  
+  assign(x=paste("dzm_g5",l,sep = 'b'),value=dzm_g5_2)
+  assign(x=paste("dzm_g6",l,sep = 'b'),value=dzm_g6_2)
+  # grid.arrange(dzm_g5_2,dzm_g6_2,ncol=2,nrow=1)
+}
+
+
+####################################################################################
+##############           西苑医院                                  #################
+####################################################################################
+setwd('F:/00/项目/易老师/肿瘤/新到数据/注册登记数据导出20180814/西苑医院2014-8-1~2018-4-30/')
+
+
+# 保存就诊信息
+xy_jz_dat <- read.table("患者就诊信息2.csv",sep=',', header = T,encoding="utf-8",stringsAsFactors=T)
+# str(xy_jz_dat)
+xy_jz_dat$就诊时间 <- as.Date(xy_jz_dat$就诊时间)
+xy_jz_dat$就诊年份 <- as.factor(year(xy_jz_dat$就诊时间))
+
+xy_zyfy_dat <- read.table("住院费用2.csv",sep=',', header = T,encoding="utf-8",stringsAsFactors=T)
+xy_mzfy_dat <- read.table("门诊费用2.csv",sep=',', header = T,encoding="utf-8",stringsAsFactors=T)
+
+
+####################################################
+####### 数据预处理
+
+## 1.处理年龄
+xy_jz_dat$年龄 <- gsub(pattern = "岁", replacement = "", x = xy_jz_dat$年龄 )
+xy_jz_dat$年龄 <- as.integer(xy_jz_dat$年龄)
+# str(xy_jz_dat)
+# <40;40~50;50~60;60~70;70<
+xy_jz_dat$年龄分组 <- 0
+# which(is.na(xy_jz_dat$年龄))
+#colnames(xy_jz_dat)
+
+for(i in 1:nrow(xy_jz_dat)){
+  #print(i)
+  if(is.na(xy_jz_dat[i,5]))  xy_jz_dat[i,17] <- "null" 
+  else if(xy_jz_dat[i,5] >= 70)  xy_jz_dat[i,17] <- ">=70" 
+  else if(xy_jz_dat[i,5] < 70 & xy_jz_dat[i,5] >= 60)  xy_jz_dat[i,17] <- "60~70" 
+  else if(xy_jz_dat[i,5] < 60 & xy_jz_dat[i,5] >= 50)  xy_jz_dat[i,17] <- "50~60" 
+  else if(xy_jz_dat[i,5] < 50 & xy_jz_dat[i,5] >= 40)  xy_jz_dat[i,17] <- "40~50" 
+  else if(xy_jz_dat[i,5] < 40 )  xy_jz_dat[i,17] <- "<40"
+}
+
+xy_jz_dat$年龄分组 <- as.factor(xy_jz_dat$年龄分组)
+xy_jz_dat$年龄分组 <-ordered(xy_jz_dat$年龄分组, levels = c("<40","40~50", "50~60","60~70",">=70","null"))
+
+
+#########################################################################
+############                     住院角度              ##################
+#########################################################################
+
+xy_jz_dat1 <- xy_jz_dat[xy_jz_dat$就诊类型=="住院",]
+
+
+####################################################
+# 患者性别占比统计
+xy_a1 <- as.data.frame(table(xy_jz_dat1$性别,xy_jz_dat1$就诊年份)) 
+xy_a1 <- xy_a1[xy_a1$Var1 %in% c("男","女"),]
+
+xy_g1 <- ggplot(xy_a1,aes(x = Var2,Freq,fill=Var1))+
+  geom_bar(stat="identity",position="fill",width=0.8,colour="white")+
+  geom_text(data=xy_a1[xy_a1$Var1=="男",],aes(Var2,0.95,label=Freq),colour="white",show.legend = F,size=3)+
+  geom_text(data=xy_a1[xy_a1$Var1=="女",],aes(Var2,0.05,label=Freq),colour="white",show.legend = F,size=3)+
+  theme(plot.title = element_text(hjust = 0.5),axis.text.x = element_text(size =10,angle=40))+
+  labs(x = "年份", y = "比例", title = "2015~2018西苑医院住院男女患者占比",fill="性别")
+
+# print(xy_g1)
+
+####################################################
+# 患者本埠外埠占比
+
+####################################################
+# 患者年龄分布
+
+xy_age1 <- as.data.frame(table(xy_jz_dat1$性别,xy_jz_dat1$年龄分组,xy_jz_dat1$就诊年份)) 
+xy_age1 <- xy_age1[xy_age1$Var1 %in% c("男","女"),]
+xy_age1 <- xy_age1[xy_age1$Var3 %in% c("2015","2016","2017","2018"),]
+
+
+xy_g2 <-  ggplot(xy_age1,aes(x=Var1, y=Freq, fill=Var2))+
+  geom_bar(stat='identity',position="dodge")+
+  labs(x = "年龄段", y = "人数", title = "西苑医院住院男女患者年龄段分布")+
+  facet_wrap(~Var3,scales="free",nrow=1)
+
+# print(xy_g2)
+
+####################################################
+# 患者癌症病种分布
+xy_disease1 <- as.data.frame(table(xy_jz_dat1$病种,xy_jz_dat1$晚期,xy_jz_dat1$就诊年份)) 
+xy_disease1 <- xy_disease1[which(xy_disease1$Var1!='其他'),]
+xy_disease1 <- xy_disease1[which(xy_disease1$Freq!=0),]
+
+xy_g3 <-  ggplot(xy_disease1,aes(x=Var1, y=Freq, fill=Var2))+
+  geom_bar(stat='identity',position="dodge")+
+  labs(x = "癌症类型", y = "人数", title = "西苑医院住院患者癌症病种分布")+
+  facet_wrap(~Var3,scales="free",nrow=1)+
+  labs(fill="晚期")
+# print(xy_g3)
+
+
+
+
+####################################################
+# 住院费用
+# 合并匹配费用和就诊信息表，按照患者ID,就诊次数匹配
+xy_dat_temp1 <- merge(xy_zyfy_dat,xy_jz_dat,by=c("患者ID","就诊次数"))
+# merge(xy_zyfy_dat,xy_zyfy_dat,by=c("患者ID","就诊次数"))
+# colnames(xy_dat_temp1)
+xy_zyfy_dat2 <- xy_dat_temp1[,c(1:24,38)]
+# colnames(xy_zyfy_dat2)
+str(xy_zyfy_dat2)
+xy_zyfy_dat2$总费用 <- rowSums(xy_zyfy_dat2[,3:24]) 
+
+nn <- ncol(xy_zyfy_dat2)
+nc1 <- nn-3
+nc2 <- nn-2
+
+
+# 统计规则：具体的某项费用，如西药、输血之类，当计算次均费用时，
+# 只将非0的纳入计算，即只有开了西药或者输了血的才算次数。
+# 计算占比时0的也计算
+c_per_cost <- function(x){
+  t_ind <- which(x!=0)
+  out <- ifelse(is.na(mean(x[t_ind])),0,mean(x[t_ind]))
+  out <- round(out,2)
+  return(out)
+}
+
+xy_zy_per_cost <- as.data.frame(matrix(0,4,nc1)) 
+colnames(xy_zy_per_cost) <- c("年份",colnames(xy_zyfy_dat2)[3:nc2])
+
+xy_zy_r_cost <- as.data.frame(matrix(0,4,nc2)) 
+colnames(xy_zy_r_cost) <- c("年份",colnames(xy_zyfy_dat2)[c(3:nc2,nn)])
+
+nf <- unique(xy_jz_dat$就诊年份)
+k = 1 
+for(m in nf){
+  print(m)
+  # 计算次均值
+  xy_zy_per_cost[k,1] <- m
+  ind_temp <- which(xy_zyfy_dat2$就诊年份==m)
+  xy_zy_per_cost[k,2:nc1] <- apply(xy_zyfy_dat2[ind_temp,3:nc2],2,c_per_cost)
+  
+  # 计算占比
+  xy_zy_r_cost[k,1] <- m
+  xy_zy_r_cost[k,2:nc2] <- round(colMeans(xy_zyfy_dat2[ind_temp,c(3:nc2,nn)]),2) 
+  
+  k = k+1
+}
+
+# 绘制次均费用直方图（分面）
+xy_zy_per_cost1 <- melt(xy_zy_per_cost,id.vars="年份")
+xy_zy_per_cost1 <- xy_zy_per_cost1[which(xy_zy_per_cost1$value!=0),]
+str(xy_zy_per_cost1)
+xy_g4 <- ggplot(xy_zy_per_cost1,aes(x=variable, y=value, fill=年份))+
+  geom_bar(stat='identity',position="dodge",width = 0.5)+
+  labs(x = "费用类别", y = "次均费用", title = "西苑医院住院次均费用年度变化")+
+  facet_wrap(~variable,scales="free")
+
+# print(xy_g4)
+
+# 绘制费用占比饼图
+for(l in 1:4){
+  
+  xy_aaa1 <- xy_zy_r_cost[l,which(xy_zy_r_cost[l,2:nc1]>1000)+1]
+  xy_aaa1 <- as.data.frame(t(xy_aaa1)) 
+  # 其余金额较小(小于1000)的归为一类
+  xy_bbb1 <- sum(xy_zy_r_cost[l,which(xy_zy_r_cost[l,2:nc1]<1000)+1])
+  xy_aaa1 <- rbind(xy_aaa1,xy_bbb1)
+  rownames(xy_aaa1)[nrow(xy_aaa1)] <- "剩余费用之和"
+  
+  xy_aaa1$var <- rownames(xy_aaa1)
+  
+  colnames(xy_aaa1)[1] <- 'value'
+  xy_aaa1 <- arrange(xy_aaa1,value)
+  # xy_aaa1$var <- factor(xy_aaa1$var,levels = c("西药","中成药","化验","检查","中草药","治疗") )
+  xy_aaa1$var <- factor(xy_aaa1$var,levels = xy_aaa1$var ) # 排好序，不然后续画饼图会乱
+  # str(xy_aaa1)
+  # levels(xy_aaa1$var)
+  
+  
+  # 绘制饼图资料：https://blog.csdn.net/Bone_ACE/article/details/47455363#%E9%A5%BC%E7%8E%AF%E4%BC%98%E5%8C%96
+  xy_g5<- ggplot(xy_aaa1,aes(x =1,value,fill=var))+
+    geom_bar(stat = "identity",color='black')+
+    scale_fill_discrete(breaks=xy_aaa1$var)+
+    theme_bw()+
+    geom_text(aes(x=1.25,y=cumsum(rev(value))-rev(value)/2,label=paste(rev(var),":",round(rev(value)/sum(value)*100,2),"%")),size=4,color="white")+
+    theme(panel.grid=element_blank()) +    ## 去掉白色圆框和中间的坐标线
+    theme(panel.border=element_blank())+   ## 去掉最外层正方形的框框
+    theme(axis.text.x = element_blank())+  ## 白色的外框即是原柱状图的X轴，把X轴的刻度文字去掉即可
+    labs(x = "", y = "", title = paste(l+2014,"西苑医院住院金额较大的费用类型占比",sep='')) + 
+    theme(axis.ticks = element_blank()) + 
+    theme(axis.text.y = element_blank())+
+    guides(fill=FALSE)+   ## 将图例标题设为空
+    coord_polar(theta = "y")
+  
+  
+  # 绘制金额较小的部分
+  xy_ccc1 <- xy_zy_r_cost[l,which(xy_zy_r_cost[l,2:nc1]<1000&xy_zy_r_cost[l,2:nc1]>10)+1]
+  xy_ccc1 <- as.data.frame(t(xy_ccc1)) 
+  
+  
+  xy_ccc1$var <- rownames(xy_ccc1)
+  
+  colnames(xy_ccc1)[1] <- 'value'
+  xy_ccc1 <- arrange(xy_ccc1,value)
+  xy_ccc1$var <- factor(xy_ccc1$var,levels = xy_ccc1$var ) # 排好序，不然后续画饼图会乱
+  
+  
+  xy_g6 <- ggplot(xy_ccc1,aes(x =1,value,fill=var))+
+    geom_bar(stat = "identity",color='black')+
+    scale_fill_discrete(breaks=var)+
+    theme_bw()+
+    geom_text(aes(x=1.25,y=cumsum(rev(value))-rev(value)/2,label=paste(rev(var),":",round(rev(value)/sum(value)*100,2),"%")),size=4,color="white")+
+    theme(panel.grid=element_blank()) +    ## 去掉白色圆框和中间的坐标线
+    theme(panel.border=element_blank())+   ## 去掉最外层正方形的框框
+    theme(axis.text.x = element_blank())+  ## 白色的外框即是原柱状图的X轴，把X轴的刻度文字去掉即可
+    labs(x = "", y = "", title = paste(l+2014,"西苑医院住院金额较小的费用类型占比",sep='') ) + 
+    theme(axis.ticks = element_blank()) + 
+    theme(axis.text.y = element_blank())+
+    guides(fill=FALSE)+   ## 将图例标题设为空
+    coord_polar(theta = "y")
+  assign(x=paste("xy_g5",l,sep = 'a'),value=xy_g5)
+  assign(x=paste("xy_g6",l,sep = 'a'),value=xy_g6)
+  # grid.arrange(xy_g5,xy_g6,ncol=2,nrow=1)
+}
+
+
+#########################################################################
+############                     门诊角度              ##################
+#########################################################################
+
+xy_jz_dat2 <- xy_jz_dat[xy_jz_dat$就诊类型=="门诊",]
+
+
+####################################################
+# 患者性别占比统计
+xy_a2 <- as.data.frame(table(xy_jz_dat1$性别,xy_jz_dat1$就诊年份)) 
+xy_a2 <- xy_a2[xy_a2$Var1 %in% c("男","女"),]
+
+xy_g1_2 <- ggplot(xy_a2,aes(x = Var2,Freq,fill=Var1))+
+  geom_bar(stat="identity",position="fill",width=0.8,colour="white")+
+  geom_text(data=xy_a2[xy_a2$Var1=="男",],aes(Var2,0.95,label=Freq),colour="white",show.legend = F,size=3)+
+  geom_text(data=xy_a2[xy_a2$Var1=="女",],aes(Var2,0.05,label=Freq),colour="white",show.legend = F,size=3)+
+  theme(plot.title = element_text(hjust = 0.5),axis.text.x = element_text(size =10,angle=40))+
+  labs(x = "年份", y = "比例", title = "2015~2018西苑医院门诊男女患者占比",fill="性别")
+
+# print(xy_g1_2)
+
+####################################################
+# 患者本埠外埠占比
+
+####################################################
+# 患者年龄分布
+
+xy_age2 <- as.data.frame(table(xy_jz_dat1$性别,xy_jz_dat1$年龄分组,xy_jz_dat1$就诊年份)) 
+xy_age2 <- xy_age2[xy_age2$Var1 %in% c("男","女"),]
+
+xy_g2_2 <-  ggplot(xy_age2,aes(x=Var1, y=Freq, fill=Var2))+
+  geom_bar(stat='identity',position="dodge")+
+  labs(x = "年龄段", y = "人数", title = "西苑医院门诊男女患者年龄段分布")+
+  facet_wrap(~Var3,scales="free",nrow=1)+
+  labs(fill="年龄段")
+
+# print(xy_g2_2)
+
+####################################################
+# 患者癌症病种分布
+xy_disease2 <- as.data.frame(table(xy_jz_dat1$病种,xy_jz_dat1$晚期,xy_jz_dat1$就诊年份)) 
+xy_disease2 <- xy_disease2[which(xy_disease2$Var1!='其他'),]
+xy_disease2 <- xy_disease2[which(xy_disease2$Freq!=0),]
+xy_disease2 <- xy_disease2[which(xy_disease2$Var3!="2014"),]
+
+xy_g3_2 <-  ggplot(xy_disease2,aes(x=Var1, y=Freq, fill=Var2))+
+  geom_bar(stat='identity',position="dodge")+
+  labs(x = "癌症类型", y = "人数", title = "西苑医院门诊患者癌症病种分布")+
+  facet_wrap(~Var3,scales="free",nrow=1)
+# print(xy_g3_2)
+
+
+
+####################################################
+# 门诊费用
+# 合并匹配费用和就诊信息表，按照患者ID,就诊次数匹配
+xy_dat_temp2 <- merge(xy_mzfy_dat,xy_jz_dat,by=c("患者ID","就诊次数"))
+# merge(xy_mzfy_dat,xy_mzfy_dat,by=c("患者ID","就诊次数"))
+# colnames(xy_dat_temp2)
+xy_mzfy_dat2 <- xy_dat_temp2[,c(1:23,37)]
+# colnames(xy_mzfy_dat2)
+# str(xy_mzfy_dat2)
+xy_mzfy_dat2$总费用 <- rowSums(xy_mzfy_dat2[,3:23]) 
+
+nn <- ncol(xy_mzfy_dat2)
+nc1 <- nn-3
+nc2 <- nn-2
+
+
+# 统计规则：具体的某项费用，如西药、输血之类，当计算次均费用时，
+# 只将非0的纳入计算，即只有开了西药或者输了血的才算次数。
+# 计算占比时0的也计算
+
+
+xy_mz_per_cost <- as.data.frame(matrix(0,4,nc1)) 
+colnames(xy_mz_per_cost) <- c("年份",colnames(xy_mzfy_dat2)[3:nc2])
+
+xy_mz_r_cost <- as.data.frame(matrix(0,4,nc2)) 
+colnames(xy_mz_r_cost) <- c("年份",colnames(xy_mzfy_dat2)[c(3:nc2,nn)])
+
+nf <- unique(xy_jz_dat$就诊年份)
+k = 1 
+for(m in nf){
+  print(m)
+  # 计算次均值
+  xy_mz_per_cost[k,1] <- m
+  ind_temp <- which(xy_mzfy_dat2$就诊年份==m)
+  xy_mz_per_cost[k,2:nc1] <- apply(xy_mzfy_dat2[ind_temp,3:nc2],2,c_per_cost)
+  
+  # 计算占比
+  xy_mz_r_cost[k,1] <- m
+  xy_mz_r_cost[k,2:nc2] <- round(colMeans(xy_mzfy_dat2[ind_temp,c(3:nc2,nn)]),2) 
+  
+  k = k+1
+}
+
+# 绘制次均费用直方图（分面）
+xy_mz_per_cost1 <- melt(xy_mz_per_cost,id.vars="年份")
+xy_mz_per_cost1 <- xy_mz_per_cost1[which(xy_mz_per_cost1$value!=0),]
+str(xy_mz_per_cost1)
+xy_g4_2 <- ggplot(xy_mz_per_cost1,aes(x=variable, y=value, fill=年份))+
+  geom_bar(stat='identity',position="dodge",width = 0.5)+
+  labs(x = "费用类别", y = "次均费用", title = "西苑医院门诊次均费用年度变化")+
+  facet_wrap(~variable,scales="free")
+
+# print(xy_g4_2)
+
+# 绘制费用占比饼图
+for(l in 1:4){
+  
+  xy_aaa2 <- xy_mz_r_cost[l,which(xy_mz_r_cost[l,2:nc1]>50)+1]
+  xy_aaa2 <- as.data.frame(t(xy_aaa2)) 
+  # 其余金额较小(小于1000)的归为一类
+  xy_bbb2 <- sum(xy_mz_r_cost[l,which(xy_mz_r_cost[l,2:nc1]<=50)+1])
+  xy_aaa2 <- rbind(xy_aaa2,xy_bbb2)
+  rownames(xy_aaa2)[nrow(xy_aaa2)] <- "剩余费用之和"
+  
+  xy_aaa2$var <- rownames(xy_aaa2)
+  
+  colnames(xy_aaa2)[1] <- 'value'
+  xy_aaa2 <- arrange(xy_aaa2,value)
+  # xy_aaa2$var <- factor(xy_aaa2$var,levels = c("西药","中成药","化验","检查","中草药","治疗") )
+  xy_aaa2$var <- factor(xy_aaa2$var,levels = xy_aaa2$var ) # 排好序，不然后续画饼图会乱
+  # str(xy_aaa2)
+  # levels(xy_aaa2$var)
+  
+  
+  # 绘制饼图资料：https://blog.csdn.net/Bone_ACE/article/details/47455363#%E9%A5%BC%E7%8E%AF%E4%BC%98%E5%8C%96
+  xy_g5_2<- ggplot(xy_aaa2,aes(x =1,value,fill=var))+
+    geom_bar(stat = "identity",color='black')+
+    scale_fill_discrete(breaks=xy_aaa2$var)+
+    theme_bw()+
+    geom_text(aes(x=1.25,y=cumsum(rev(value))-rev(value)/2,label=paste(rev(var),":",round(rev(value)/sum(value)*100,2),"%")),size=4,color="white")+
+    theme(panel.grid=element_blank()) +    ## 去掉白色圆框和中间的坐标线
+    theme(panel.border=element_blank())+   ## 去掉最外层正方形的框框
+    theme(axis.text.x = element_blank())+  ## 白色的外框即是原柱状图的X轴，把X轴的刻度文字去掉即可
+    labs(x = "", y = "", title = paste(l+2014,"西苑医院门诊金额较大的费用类型占比",sep='')) + 
+    theme(axis.ticks = element_blank()) + 
+    theme(axis.text.y = element_blank())+
+    guides(fill=FALSE)+   ## 将图例标题设为空
+    coord_polar(theta = "y")
+  
+  
+  # 绘制金额较小的部分
+  xy_ccc2 <- xy_mz_r_cost[l,which(xy_mz_r_cost[l,2:nc1]<50&xy_mz_r_cost[l,2:nc1]>0)+1]
+  xy_ccc2 <- as.data.frame(t(xy_ccc2)) 
+  
+  
+  xy_ccc2$var <- rownames(xy_ccc2)
+  
+  colnames(xy_ccc2)[1] <- 'value'
+  xy_ccc2 <- arrange(xy_ccc2,value)
+  xy_ccc2$var <- factor(xy_ccc2$var,levels = xy_ccc2$var ) # 排好序，不然后续画饼图会乱
+  
+  
+  xy_g6_2 <- ggplot(xy_ccc2,aes(x =1,value,fill=var))+
+    geom_bar(stat = "identity",color='black')+
+    scale_fill_discrete(breaks=var)+
+    theme_bw()+
+    geom_text(aes(x=1.25,y=cumsum(rev(value))-rev(value)/2,label=paste(rev(var),":",round(rev(value)/sum(value)*100,2),"%")),size=4,color="white")+
+    theme(panel.grid=element_blank()) +    ## 去掉白色圆框和中间的坐标线
+    theme(panel.border=element_blank())+   ## 去掉最外层正方形的框框
+    theme(axis.text.x = element_blank())+  ## 白色的外框即是原柱状图的X轴，把X轴的刻度文字去掉即可
+    labs(x = "", y = "", title = paste(l+2014,"西苑医院门诊金额较小的费用类型占比",sep='') ) + 
+    theme(axis.ticks = element_blank()) + 
+    theme(axis.text.y = element_blank())+
+    guides(fill=FALSE)+   ## 将图例标题设为空
+    coord_polar(theta = "y")
+  
+  assign(x=paste("xy_g5",l,sep = 'b'),value=xy_g5_2)
+  assign(x=paste("xy_g6",l,sep = 'b'),value=xy_g6_2)
+  # grid.arrange(xy_g5_2,xy_g6_2,ncol=2,nrow=1)
+}
+
+####################################################################################
+##############           肿瘤医院                                  #################
+####################################################################################
+setwd('F:/00/项目/易老师/肿瘤/新到数据/注册登记数据导出20180814/肿瘤医院2015-1-29~2018-5-30/')
+
+
+# 保存就诊信息
+zl_jz_dat <- read.table("患者就诊信息2.csv",sep=',', header = T,encoding="utf-8",stringsAsFactors=T)
+# str(zl_jz_dat)
+zl_jz_dat$就诊时间 <- as.Date(zl_jz_dat$就诊时间)
+zl_jz_dat$就诊年份 <- as.factor(year(zl_jz_dat$就诊时间))
+
+zl_zyfy_dat <- read.table("住院费用2.csv",sep=',', header = T,encoding="utf-8",stringsAsFactors=T)
+
+
+####################################################
+####### 数据预处理
+
+## 1.处理年龄
+zl_jz_dat$年龄 <- gsub(pattern = "岁", replacement = "", x = zl_jz_dat$年龄 )
+zl_jz_dat$年龄 <- as.integer(zl_jz_dat$年龄)
+# str(zl_jz_dat)
+# <40;40~50;50~60;60~70;70<
+zl_jz_dat$年龄分组 <- 0
+which(is.na(zl_jz_dat$年龄))
+#colnames(zl_jz_dat)
+
+for(i in 1:nrow(zl_jz_dat)){
+  #print(i)
+  if(is.na(zl_jz_dat[i,5]))  zl_jz_dat[i,17] <- "null" 
+  else if(zl_jz_dat[i,5] >= 70)  zl_jz_dat[i,17] <- ">=70" 
+  else if(zl_jz_dat[i,5] < 70 & zl_jz_dat[i,5] >= 60)  zl_jz_dat[i,17] <- "60~70" 
+  else if(zl_jz_dat[i,5] < 60 & zl_jz_dat[i,5] >= 50)  zl_jz_dat[i,17] <- "50~60" 
+  else if(zl_jz_dat[i,5] < 50 & zl_jz_dat[i,5] >= 40)  zl_jz_dat[i,17] <- "40~50" 
+  else if(zl_jz_dat[i,5] < 40 )  zl_jz_dat[i,17] <- "<40"
+}
+
+zl_jz_dat$年龄分组 <- as.factor(zl_jz_dat$年龄分组)
+zl_jz_dat$年龄分组 <-ordered(zl_jz_dat$年龄分组, levels = c("<40","40~50", "50~60","60~70",">=70","null"))
+
+
+#########################################################################
+############                     住院角度              ##################
+#########################################################################
+
+zl_jz_dat1 <- zl_jz_dat[zl_jz_dat$就诊类型=="住院",]
+
+
+####################################################
+# 患者性别占比统计
+zl_a1 <- as.data.frame(table(zl_jz_dat1$性别,zl_jz_dat1$就诊年份)) 
+zl_a1 <- zl_a1[zl_a1$Var1 %in% c("男","女"),]
+
+zl_g1 <- ggplot(zl_a1,aes(x = Var2,Freq,fill=Var1))+
+  geom_bar(stat="identity",position="fill",width=0.8,colour="white")+
+  geom_text(data=zl_a1[zl_a1$Var1=="男",],aes(Var2,0.95,label=Freq),colour="white",show.legend = F,size=3)+
+  geom_text(data=zl_a1[zl_a1$Var1=="女",],aes(Var2,0.05,label=Freq),colour="white",show.legend = F,size=3)+
+  theme(plot.title = element_text(hjust = 0.5),axis.text.x = element_text(size =10,angle=40))+
+  labs(x = "年份", y = "比例", title = "2015~2018肿瘤医院住院男女患者占比",colour = "CUT")
+# +coord_polar(theta="y")
+# print(zl_g1)
+
+####################################################
+# 患者本埠外埠占比
+
+####################################################
+# 患者年龄分布
+
+zl_age1 <- as.data.frame(table(zl_jz_dat1$性别,zl_jz_dat1$年龄分组,zl_jz_dat1$就诊年份)) 
+zl_age1 <- zl_age1[zl_age1$Var1 %in% c("男","女"),]
+
+zl_g2 <-  ggplot(zl_age1,aes(x=Var1, y=Freq, fill=Var2))+
+  geom_bar(stat='identity',position="dodge")+
+  labs(x = "年龄段", y = "人数", title = "肿瘤医院住院男女患者年龄段分布")+
+  facet_wrap(~Var3,scales="free",nrow = 1)
+
+# print(zl_g2)
+
+####################################################
+# 患者癌症病种分布
+zl_disease1 <- as.data.frame(table(zl_jz_dat1$病种,zl_jz_dat1$晚期,zl_jz_dat1$就诊年份)) 
+zl_disease1 <- zl_disease1[which(zl_disease1$Var1!='其他'),]
+zl_disease1 <- zl_disease1[which(zl_disease1$Freq!=0),]
+
+zl_g3 <-  ggplot(zl_disease1,aes(x=Var1, y=Freq, fill=Var2))+
+  geom_bar(stat='identity',position="dodge")+
+  labs(x = "癌症类型", y = "人数", title = "肿瘤医院住院患者癌症病种分布")+
+  facet_wrap(~Var3,scales="free",nrow = 1)
+# print(zl_g3)
+
+
+
+
+####################################################
+# 住院费用
+# 合并匹配费用和就诊信息表，按照患者ID,就诊次数匹配
+zl_dat_temp1 <- merge(zl_zyfy_dat,zl_jz_dat,by=c("患者ID","就诊次数"))
+# merge(zl_zyfy_dat,zl_zyfy_dat,by=c("患者ID","就诊次数"))
+# colnames(zl_dat_temp1)
+zl_zyfy_dat2 <- zl_dat_temp1[,c(1:24,38)]
+# colnames(zl_zyfy_dat2)
+# str(zl_zyfy_dat2)
+zl_zyfy_dat2$总费用 <- rowSums(zl_zyfy_dat2[,3:24]) 
+
+nn <- ncol(zl_zyfy_dat2)
+nc1 <- nn-3
+nc2 <- nn-2
+
+
+# 统计规则：具体的某项费用，如西药、输血之类，当计算次均费用时，
+# 只将非0的纳入计算，即只有开了西药或者输了血的才算次数。
+# 计算占比时0的也计算
+c_per_cost <- function(x){
+  t_ind <- which(x!=0)
+  out <- ifelse(is.na(mean(x[t_ind])),0,mean(x[t_ind]))
+  out <- round(out,2)
+  return(out)
+}
+
+zl_zy_per_cost <- as.data.frame(matrix(0,4,nc1)) 
+colnames(zl_zy_per_cost) <- c("年份",colnames(zl_zyfy_dat2)[3:nc2])
+
+zl_zy_r_cost <- as.data.frame(matrix(0,4,nc2)) 
+colnames(zl_zy_r_cost) <- c("年份",colnames(zl_zyfy_dat2)[c(3:nc2,nn)])
+
+nf <- unique(zl_jz_dat$就诊年份)
+k = 1 
+for(m in nf){
+  print(m)
+  # 计算次均值
+  zl_zy_per_cost[k,1] <- m
+  ind_temp <- which(zl_zyfy_dat2$就诊年份==m)
+  zl_zy_per_cost[k,2:nc1] <- apply(zl_zyfy_dat2[ind_temp,3:nc2],2,c_per_cost)
+  
+  # 计算占比
+  zl_zy_r_cost[k,1] <- m
+  zl_zy_r_cost[k,2:nc2] <- round(colMeans(zl_zyfy_dat2[ind_temp,c(3:nc2,nn)]),2) 
+  
+  k = k+1
+}
+
+# 绘制次均费用直方图（分面）
+zl_zy_per_cost1 <- melt(zl_zy_per_cost,id.vars="年份")
+zl_zy_per_cost1 <- zl_zy_per_cost1[which(zl_zy_per_cost1$value!=0),]
+str(zl_zy_per_cost1)
+zl_g4 <- ggplot(zl_zy_per_cost1,aes(x=variable, y=value, fill=年份))+
+  geom_bar(stat='identity',position="dodge",width = 0.5)+
+  labs(x = "费用类别", y = "次均费用", title = "肿瘤医院住院次均费用年度变化")+
+  facet_wrap(~variable,scales="free")
+
+# print(zl_g4)
+
+# 绘制费用占比饼图
+for(l in 1:4){
+  
+  zl_aaa1 <- zl_zy_r_cost[l,which(zl_zy_r_cost[l,2:nc1]>1000)+1]
+  zl_aaa1 <- as.data.frame(t(zl_aaa1)) 
+  # 其余金额较小(小于1000)的归为一类
+  zl_bbb1 <- sum(zl_zy_r_cost[l,which(zl_zy_r_cost[l,2:nc1]<1000)+1])
+  zl_aaa1 <- rbind(zl_aaa1,zl_bbb1)
+  rownames(zl_aaa1)[nrow(zl_aaa1)] <- "剩余费用之和"
+  
+  zl_aaa1$var <- rownames(zl_aaa1)
+  
+  colnames(zl_aaa1)[1] <- 'value'
+  zl_aaa1 <- arrange(zl_aaa1,value)
+  # zl_aaa1$var <- factor(zl_aaa1$var,levels = c("西药","中成药","化验","检查","中草药","治疗") )
+  zl_aaa1$var <- factor(zl_aaa1$var,levels = zl_aaa1$var ) # 排好序，不然后续画饼图会乱
+  # str(zl_aaa1)
+  # levels(zl_aaa1$var)
+  
+  
+  # 绘制饼图资料：https://blog.csdn.net/Bone_ACE/article/details/47455363#%E9%A5%BC%E7%8E%AF%E4%BC%98%E5%8C%96
+  zl_g5<- ggplot(zl_aaa1,aes(x =1,value,fill=var))+
+    geom_bar(stat = "identity",color='black')+
+    scale_fill_discrete(breaks=zl_aaa1$var)+
+    theme_bw()+
+    geom_text(aes(x=1.25,y=cumsum(rev(value))-rev(value)/2,label=paste(rev(var),":",round(rev(value)/sum(value)*100,2),"%")),size=4,color="white")+
+    theme(panel.grid=element_blank()) +    ## 去掉白色圆框和中间的坐标线
+    theme(panel.border=element_blank())+   ## 去掉最外层正方形的框框
+    theme(axis.text.x = element_blank())+  ## 白色的外框即是原柱状图的X轴，把X轴的刻度文字去掉即可
+    labs(x = "", y = "", title = paste(l+2014,"肿瘤医院住院金额较大的费用类型占比",sep='')) + 
+    theme(axis.ticks = element_blank()) + 
+    theme(axis.text.y = element_blank())+
+    guides(fill=FALSE)+   ## 将图例标题设为空
+    coord_polar(theta = "y")
+  
+  
+  # 绘制金额较小的部分
+  zl_ccc1 <- zl_zy_r_cost[l,which(zl_zy_r_cost[l,2:nc1]<1000&zl_zy_r_cost[l,2:nc1]>10)+1]
+  zl_ccc1 <- as.data.frame(t(zl_ccc1)) 
+  
+  
+  zl_ccc1$var <- rownames(zl_ccc1)
+  
+  colnames(zl_ccc1)[1] <- 'value'
+  zl_ccc1 <- arrange(zl_ccc1,value)
+  zl_ccc1$var <- factor(zl_ccc1$var,levels = zl_ccc1$var ) # 排好序，不然后续画饼图会乱
+  
+  
+  zl_g6 <- ggplot(zl_ccc1,aes(x =1,value,fill=var))+
+    geom_bar(stat = "identity",color='black')+
+    scale_fill_discrete(breaks=var)+
+    theme_bw()+
+    geom_text(aes(x=1.25,y=cumsum(rev(value))-rev(value)/2,label=paste(rev(var),":",round(rev(value)/sum(value)*100,2),"%")),size=4,color="white")+
+    theme(panel.grid=element_blank()) +    ## 去掉白色圆框和中间的坐标线
+    theme(panel.border=element_blank())+   ## 去掉最外层正方形的框框
+    theme(axis.text.x = element_blank())+  ## 白色的外框即是原柱状图的X轴，把X轴的刻度文字去掉即可
+    labs(x = "", y = "", title = paste(l+2014,"肿瘤医院住院金额较小的费用类型占比",sep='') ) + 
+    theme(axis.ticks = element_blank()) + 
+    theme(axis.text.y = element_blank())+
+    guides(fill=FALSE)+   ## 将图例标题设为空
+    coord_polar(theta = "y")
+  assign(x=paste("zl_g5",l,sep = 'a'),value=zl_g5)
+  assign(x=paste("zl_g6",l,sep = 'a'),value=zl_g6)
+  # grid.arrange(zl_g5,zl_g6,ncol=2,nrow=1)
+}
+
+
+##########################################################################################
+##########################      汇总展示                  ################################
+##########################################################################################
+
+
+
+# 性别
+### 住院
+dzm_a1$hospital <- 'dongzhimen'
+xy_a1$hospital <- 'xiyuan'
+zl_a1$hospital <- 'zhongliu'
+
+dzm_a1$jzlx <- 'zhu_yuan'
+xy_a1$jzlx <- 'zhu_yuan'
+zl_a1$jzlx <- 'zhu_yuan'
+
+t_a1 <- rbind(dzm_a1,xy_a1,zl_a1)
+t_a1 <- t_a1[which(t_a1$Var2 %in% c("2015","2016","2017","2018")),]
+t_a1$Var1 <- ifelse(t_a1$Var1=="男","male","female")
+t_a1$Var1 <- as.factor(t_a1$Var1)
+t_a1$hospital <- as.factor(t_a1$hospital)
+colnames(t_a1) <- c("性别","年份","频数","所属医院","就诊类型")
+t_a1 <- t_a1[,c(4,5,2,1,3)]
+
+### 门诊
+dzm_a2$hospital <- 'dongzhimen'
+xy_a2$hospital <- 'xiyuan'
+
+dzm_a2$jzlx <- 'men_zhen'
+xy_a2$jzlx <- 'men_zhen'
+
+t_a2 <- rbind(dzm_a2,xy_a2)
+t_a2 <- t_a2[which(t_a2$Var2 %in% c("2015","2016","2017","2018")),]
+t_a2$Var1 <- ifelse(t_a2$Var1=="男","male","female")
+t_a2$Var1 <- as.factor(t_a2$Var1)
+t_a2$hospital <- as.factor(t_a2$hospital)
+colnames(t_a2) <- c("性别","年份","频数","所属医院","就诊类型")
+t_a2 <- t_a2[,c(4,5,2,1,3)]
+# 将门诊和住院放一起
+t_a <- rbind(t_a1,t_a2)
+t_a$就诊类型 <- as.factor(t_a$就诊类型)
+
+
+
+
+# 年龄
+### 住院
+dzm_age1$hospital <- 'dongzhimen'
+xy_age1$hospital <- 'xiyuan'
+zl_age1$hospital <- 'zhongliu'
+
+dzm_age1$jzlx <- 'zhu_yuan'
+xy_age1$jzlx <- 'zhu_yuan'
+zl_age1$jzlx <- 'zhu_yuan'
+
+t_age1 <- rbind(dzm_age1,xy_age1,zl_age1)
+t_age1 <- t_age1[which(t_age1$Var3 %in% c("2015","2016","2017","2018")),]
+t_age1$hospital <- as.factor(t_age1$hospital)
+t_age1$Var1 <- ifelse(t_age1$Var1=="男","male","female")
+t_age1$Var1 <- as.factor(t_age1$Var1)
+colnames(t_age1) <- c("性别","年龄段","年份","频数","所属医院","就诊类型")
+t_age1 <- t_age1[,c(5,6,3,1,2,4)]
+
+### 门诊
+dzm_age2$hospital <- 'dongzhimen'
+xy_age2$hospital <- 'xiyuan'
+
+dzm_age2$jzlx <- 'men_zhen'
+xy_age2$jzlx <- 'men_zhen'
+
+t_age2 <- rbind(dzm_age2,xy_age2)
+t_age2 <- t_age2[which(t_age2$Var3 %in% c("2015","2016","2017","2018")),]
+t_age2$hospital <- as.factor(t_age2$hospital)
+t_age2$Var1 <- ifelse(t_age2$Var1=="男","male","female")
+t_age2$Var1 <- as.factor(t_age2$Var1)
+colnames(t_age2) <- c("性别","年龄段","年份","频数","所属医院","就诊类型")
+t_age2 <- t_age2[,c(5,6,3,1,2,4)]
+
+# 将门诊和住院放一起
+t_age <- rbind(t_age1,t_age2)
+t_age$就诊类型 <- as.factor(t_age$就诊类型)
+
+
+
+
+# 疾病种类
+### 住院
+dzm_disease1$hospital <- 'dongzhimen'
+xy_disease1$hospital <- 'xiyuan'
+zl_disease1$hospital <- 'zhongliu'
+
+zl_disease1$jzlx <- 'zhu_yuan'
+xy_disease1$jzlx <- 'zhu_yuan'
+zl_disease1$jzlx <- 'zhu_yuan'
+
+t_disease1 <- rbind(zl_disease1,xy_disease1,zl_disease1)
+t_disease1 <- t_disease1[which(t_disease1$Var3 %in% c("2015","2016","2017","2018")),]
+t_disease1$hospital <- as.factor(t_disease1$hospital)
+jb_map <- c("肠癌"="chang_ai","食道癌"="shi_dao_ai","胃癌"="wei_ai","其他"="qi_ta")
+t_disease1$Var1 <- jb_map[as.character(t_disease1$Var1)]
+t_disease1$Var1 <- as.factor(t_disease1$Var1)
+colnames(t_disease1) <- c("疾病种类","晚期","年份","频数","所属医院","就诊类型")
+t_disease1 <- t_disease1[,c(5,6,3,1,2,4)]
+
+### 住院
+dzm_disease2$hospital <- 'dongzhimen'
+xy_disease2$hospital <- 'xiyuan'
+
+dzm_disease2$jzlx <- 'men_zhen'
+xy_disease2$jzlx <- 'men_zhen'
+
+t_disease2 <- rbind(dzm_disease2,xy_disease2)
+t_disease2 <- t_disease2[which(t_disease2$Var3 %in% c("2015","2016","2017","2018")),]
+t_disease2$hospital <- as.factor(t_disease2$hospital)
+jb_map <- c("肠癌"="chang_ai","食道癌"="shi_dao_ai","胃癌"="wei_ai","其他"="qi_ta")
+t_disease2$Var1 <- jb_map[as.character(t_disease2$Var1)]
+t_disease2$Var1 <- as.factor(t_disease2$Var1)
+colnames(t_disease2) <- c("疾病种类","晚期","年份","频数","所属医院","就诊类型")
+t_disease2 <- t_disease2[,c(5,6,3,1,2,4)]
+
+# 将门诊和住院放一起
+t_disease <- rbind(t_disease1,t_disease2)
+t_disease$就诊类型 <- as.factor(t_disease$就诊类型)
+
+
+
+
+# 住院费用
+
+## 次均费用
+dzm_zy_per_cost1$hospital <- 'dongzhimen'
+xy_zy_per_cost1$hospital <- 'xiyuan'
+zl_zy_per_cost1$hospital <- 'zhongliu'
+t_zy_per_cost1 <- rbind(dzm_zy_per_cost1,xy_zy_per_cost1,zl_zy_per_cost1)
+t_zy_per_cost1 <- t_zy_per_cost1[which(t_zy_per_cost1$年份 %in% c("2015","2016","2017","2018")),]
+t_zy_per_cost1$hospital <- as.factor(t_zy_per_cost1$hospital)
+
+levels(t_zy_per_cost1$variable)
+fy_map <- c("西药"="xi_yao","中成药"="zhong_cheng_yao","中草药"="zhong_cao_yao","检查"="jian_cha",
+            "治疗"="zhi_liao","放射"="fang_she","手术"="shou_shu","化验"="hua_yan","输血"="shu_xue",
+            "调温"="tiao_wen","输氧"="shu_yang","诊疗"="zhen_liao","其他"="qi_ta","护理"="hu_li",
+            "床位"="cuang_wei","CT"="CT","煎药 "="jian_yao","住院"="zhu_yuan","病历"="bing_li",
+            "汽车"="qi_che","尸管"="shi_guan","伙食"="huo_shi","煎药"="jian_yao","常规检查"="chang_gui_jian_cha",
+            "核磁"="he_ci","B超"="B_chao","材料 "="cai_liao","正畸"="zheng_qi","镶牙"="xiang_ya",
+            "挂号"="gua_hao","司法鉴定"="si_fa_jian_ding","总费用"="total")
+t_zy_per_cost1$variable <- fy_map[as.character(t_zy_per_cost1$variable)]
+t_zy_per_cost1$variable <- as.factor(t_zy_per_cost1$variable)
+t_zy_per_cost1$年份 <- as.factor(t_zy_per_cost1$年份)
+colnames(t_zy_per_cost1) <- c("年份","费用项目","次均费用","所属医院")
+t_zy_per_cost1 <- t_zy_per_cost1[,c(4,1,2,3)]
+
+
+
+
+## 住院费用构成
+dzm_zy_r_cost1 <- melt(dzm_zy_r_cost,id.vars="年份")
+xy_zy_r_cost1 <- melt(xy_zy_r_cost,id.vars="年份")
+zl_zy_r_cost1 <- melt(zl_zy_r_cost,id.vars="年份")
+
+dzm_zy_r_cost1$hospital <- 'dongzhimen'
+xy_zy_r_cost1$hospital <- 'xiyuan'
+zl_zy_r_cost1$hospital <- 'zhongliu'
+
+t_zy_r_cost1 <- rbind(dzm_zy_r_cost1,xy_zy_r_cost1,zl_zy_r_cost1)
+t_zy_r_cost1 <- t_zy_r_cost1[which(t_zy_r_cost1$年份 %in% c("2015","2016","2017","2018")),]
+t_zy_r_cost1$hospital <- as.factor(t_zy_r_cost1$hospital)
+
+
+t_zy_r_cost1$variable <- fy_map[as.character(t_zy_r_cost1$variable)]
+t_zy_r_cost1$variable <- as.factor(t_zy_r_cost1$variable)
+t_zy_r_cost1$年份 <- as.factor(t_zy_r_cost1$年份)
+colnames(t_zy_r_cost1) <- c("年份","费用项目","费用","所属医院")
+t_zy_r_cost1 <- t_zy_r_cost1[,c(4,1,2,3)]
+
+
+
+# 门诊费用
+
+
+## 次均费用
+dzm_mz_per_cost1$hospital <- 'dongzhimen'
+xy_mz_per_cost1$hospital <- 'xiyuan'
+t_mz_per_cost1 <- rbind(dzm_mz_per_cost1,xy_mz_per_cost1)
+t_mz_per_cost1 <- t_mz_per_cost1[which(t_mz_per_cost1$年份 %in% c("2015","2016","2017","2018")),]
+t_mz_per_cost1$hospital <- as.factor(t_mz_per_cost1$hospital)
+
+levels(t_mz_per_cost1$variable)
+
+
+t_mz_per_cost1$variable <- fy_map[as.character(t_mz_per_cost1$variable)]
+t_mz_per_cost1$variable <- as.factor(t_mz_per_cost1$variable)
+t_mz_per_cost1$年份 <- as.factor(t_mz_per_cost1$年份)
+colnames(t_zy_per_cost1) <- c("年份","费用项目","次均费用","所属医院")
+t_mz_per_cost1 <- t_mz_per_cost1[,c(4,1,2,3)]
+
+
+
+## 住院费用构成
+dzm_mz_r_cost1 <- melt(dzm_mz_r_cost,id.vars="年份")
+xy_mz_r_cost1 <- melt(xy_mz_r_cost,id.vars="年份")
+
+dzm_mz_r_cost1$hospital <- 'dongzhimen'
+xy_mz_r_cost1$hospital <- 'xiyuan'
+
+t_mz_r_cost1 <- rbind(dzm_mz_r_cost1,xy_mz_r_cost1)
+t_mz_r_cost1 <- t_mz_r_cost1[which(t_mz_r_cost1$年份 %in% c("2015","2016","2017","2018")),]
+t_mz_r_cost1$hospital <- as.factor(t_mz_r_cost1$hospital)
+
+
+t_mz_r_cost1$variable <- fy_map[as.character(t_mz_r_cost1$variable)]
+t_mz_r_cost1$variable <- as.factor(t_mz_r_cost1$variable)
+t_mz_r_cost1$年份 <- as.factor(t_mz_r_cost1$年份)
+colnames(t_mz_r_cost1) <- c("年份","费用项目","费用","所属医院")
+t_mz_r_cost1 <- t_mz_r_cost1[,c(4,1,2,3)]
+
+
+```
+
+
+# 性别分布
+```{r echo=FALSE}
+datatable(t_a,filter = 'top',caption = '性别分布', options = list(
+  autoWidth = TRUE))
+```
+
+
+```{r echo=FALSE,fig.width=12, fig.height=8}
+# 图
+t_g1 <- ggplot(t_a1,aes(x = 年份,频数,fill=所属医院))+
+  geom_bar(stat='identity',position="dodge")+
+  theme(plot.title = element_text(hjust = 0.5),axis.text.x = element_text(size =10,angle=40))+
+  labs(x = "年份", y = "比例", title = "2015~2018住院男女患者占比")+
+  facet_wrap(~性别,scales="free")
+print(t_g1)
+
+t_g2 <- ggplot(t_a2,aes(x = 年份,频数,fill=所属医院))+
+  geom_bar(stat='identity',position="dodge")+
+  theme(plot.title = element_text(hjust = 0.5),axis.text.x = element_text(size =10,angle=40))+
+  labs(x = "年份", y = "比例", title = "2015~2018门诊男女患者占比")+
+  facet_wrap(~性别,scales="free")
+print(t_g2)
+```
+
+# 年龄分布
+```{r echo=FALSE}
+datatable(t_age,filter = 'top',caption = '年龄分布', options = list(
+  autoWidth = TRUE))
+```
+
+
+```{r echo=FALSE,fig.width=20, fig.height=16}
+# 图
+grid.arrange(dzm_g2,dzm_g2_2,xy_g2,xy_g2_2,zl_g2,ncol=2,nrow=3)
+
+```
+
+# 疾病类型分布
+```{r echo=FALSE}
+datatable(t_disease,filter = 'top',caption = '疾病类型分布', options = list(
+  autoWidth = TRUE))
+
+```
+
+
+```{r echo=FALSE,fig.width=16, fig.height=12}
+# 图
+grid.arrange(dzm_g3,dzm_g3_2,xy_g3,xy_g3_2,zl_g3,ncol=2,nrow=3)
+
+```
+
+# 次均费用
+**注：**由于软件缺陷，中文会有乱码，故相关中文换成拼音。对应关系如下：
+"西药"="xi_yao","中成药"="zhong_cheng_yao","中草药"="zhong_cao_yao",   
+
+"检查"="jian_cha","治疗"="zhi_liao","放射"="fang_she","手术"="shou_shu",   
+
+"化验"="hua_yan","输血"="shu_xue","调温"="tiao_wen","输氧"="shu_yang",   
+
+"诊疗"="zhen_liao","其他"="qi_ta","护理"="hu_li","床位"="cuang_wei","CT"="CT",   
+
+"煎药 "="jian_yao","住院"="zhu_yuan","病历"="bing_li","汽车"="qi_che",  
+
+"尸管"="shi_guan","伙食"="huo_shi","煎药"="jian_yao",    
+
+"常规检查"="chang_gui_jian_cha","核磁"="he_ci","B超"="B_chao","材料"="cai_liao",    
+
+"正畸"="zheng_qi","镶牙"="xiang_ya","挂号"="gua_hao","司法鉴定"="si_fa_jian_ding",   
+
+"总费用"="total"
+
+```{r echo=FALSE}
+datatable(t_zy_per_cost1,filter = 'top',caption = '住院_次均费用', options = list(
+  autoWidth = TRUE))
+
+```
+
+
+```{r echo=FALSE}
+datatable(t_mz_per_cost1,filter = 'top',caption = '门诊_次均费用', options = list(
+  autoWidth = TRUE))
+```
+
+
+
+# 费用构成
+```{r echo=FALSE,fig.width=16, fig.height=30}
+datatable(t_zy_r_cost1,filter = 'top',caption = '住院_费用构成', options = list(
+  autoWidth = TRUE))
+
+```
+
+
+```{r echo=FALSE,fig.width=16, fig.height=30}
+
+datatable(t_mz_r_cost1,filter = 'top',caption = '门诊_费用构成', options = list(
+  autoWidth = TRUE))
+
+```
+
+
+```{r echo=FALSE,fig.width=16, fig.height=30}
+# 图
+grid.arrange(dzm_g4,dzm_g4_2,xy_g4,xy_g4_2,zl_g4,ncol=1,nrow=5)
+```
+
+
+```{r echo=FALSE,fig.width=16, fig.height=12}
+# 图
+## 东直门医院
+grid.arrange(dzm_g5a1,dzm_g6a1,ncol=2,nrow=1)
+grid.arrange(dzm_g5a2,dzm_g6a2,ncol=2,nrow=1)
+grid.arrange(dzm_g5a3,dzm_g6a3,ncol=2,nrow=1)
+grid.arrange(dzm_g5a4,dzm_g6a4,ncol=2,nrow=1)
+
+grid.arrange(dzm_g5b1,dzm_g6b1,ncol=2,nrow=1)
+grid.arrange(dzm_g5b2,dzm_g6b2,ncol=2,nrow=1)
+grid.arrange(dzm_g5b3,dzm_g6b3,ncol=2,nrow=1)
+grid.arrange(dzm_g5b4,dzm_g6b4,ncol=2,nrow=1)
+
+## 西苑医院
+grid.arrange(xy_g5a1,xy_g6a1,ncol=2,nrow=1)
+grid.arrange(xy_g5a2,xy_g6a2,ncol=2,nrow=1)
+grid.arrange(xy_g5a3,xy_g6a3,ncol=2,nrow=1)
+grid.arrange(xy_g5a4,xy_g6a4,ncol=2,nrow=1)
+
+grid.arrange(xy_g5b1,xy_g6b1,ncol=2,nrow=1)
+grid.arrange(xy_g5b2,xy_g6b2,ncol=2,nrow=1)
+grid.arrange(xy_g5b3,xy_g6b3,ncol=2,nrow=1)
+grid.arrange(xy_g5b4,xy_g6b4,ncol=2,nrow=1)
+
+# 肿瘤医院
+grid.arrange(zl_g5a1,zl_g6a1,ncol=2,nrow=1)
+grid.arrange(zl_g5a2,zl_g6a2,ncol=2,nrow=1)
+grid.arrange(zl_g5a3,zl_g6a3,ncol=2,nrow=1)
+grid.arrange(zl_g5a4,zl_g6a4,ncol=2,nrow=1)
+```
+
+
+
+
